@@ -1,0 +1,476 @@
+<?php
+    if(!defined('BASEPATH')) { exit('No direct script access allowed'); }
+
+    class Tutors extends MX_Controller{
+    public function __construct(){
+            parent::__construct();
+             //teacher_is_logged_in();
+            $this->load->library('form_validation');
+            $this->load->model('Tutors_model');
+
+        }
+    public function index(){
+            // echo '<pre>';
+            //  print_r($this->session); die;
+                $teacher_id = $this->session->userdata('teacher_id');
+
+
+                $data['teacherprofile_data'] = $this->Tutors_model->get_profile($teacher_id);
+                //$data['university_data'] = $this->Tutors_model->get_university();
+               
+                $this->template->set('title','Teacher Profile');
+                $this->template->set_layout('layout_main','front');
+                $this->template->build('teacherprofile',$data);
+            
+        }
+    public function signup(){
+        if($this->input->server('REQUEST_METHOD') == 'POST'){
+            
+                $data['name']= strip_tags($this->input->post('name'));
+                $data['email']= strip_tags($this->input->post('email'));
+                $data['phone']= strip_tags($this->input->post('phone'));
+                $data['password'] = strip_tags(md5($this->input->post('password')));
+                
+                 
+                
+                $data['usertype_id'] = 3;
+                $slug =   $data['name'];
+                $data['slug_name'] = strtolower(preg_replace('/[^A-Za-z0-9-]+/', '-',$slug));
+                $data['mail_status'] = '0';
+                $code = rand(100000, 999999); 
+                $data['mail_verify'] = $code; 
+                
+                date_default_timezone_set('Europe/London');
+                $data['added_on']=date('Y-m-d H:i:s');
+
+                
+                $this->form_validation->set_rules('name','Name','trim|required');
+                $this->form_validation->set_rules('email','Email','trim|required');
+                $this->form_validation->set_rules('phone','Phone','trim|required');
+                $this->form_validation->set_rules('password','password','trim|required');
+                $this->form_validation->set_rules('confirm_password', 'Confirm Password', 'trim|required|matches[password]');
+
+               $tutor = $this->Tutors_model->get_checking($data['email']);
+
+                if($this->form_validation->run()== TRUE){
+                        $this->load->library('upload');
+
+                        //$image = $data['name'];
+
+                        $_FILES['userfile']['name']     = $_FILES['file_src']['name'];
+                        $_FILES['userfile']['type']     = $_FILES['file_src']['type'];
+                        $_FILES['userfile']['tmp_name'] = $_FILES['file_src']['tmp_name'];
+                        $_FILES['userfile']['error']    = $_FILES['file_src']['error'];
+                        $_FILES['userfile']['size']     = $_FILES['file_src']['size'];
+
+                        $_FILES['userfile']['file_name']     = $image;
+
+                        $config['upload_path']          = './admin/uploads/resume';
+
+                        $config['allowed_types']        = 'doc|docx|pdf';
+                        $config['max_size']             = 100000;
+                       
+                        $this->upload->initialize($config);
+
+
+                        if (! $this->upload->do_upload()) {
+                         $error = array('error' => $this->upload->display_errors()); 
+                        
+                        } else {
+                            
+                            $final_files_data[] = $this->upload->data();
+
+                            
+
+                               $data['file_src']= $final_files_data[0]['file_name'];
+
+                             
+                        }
+
+            // 
+
+             
+              
+            if(count($tutor) > 0){
+                $this->session->set_flashdata('err_msg', 'Already Email ID exists!'); 
+            }else{
+
+                 $data_inserted = $this->Tutors_model->add_data($data);
+                 if($data_inserted==TRUE){
+                    
+                    $subjects = $this->input->post('subject_id');
+                    $levels = $this->input->post('levels_id');
+                    foreach($levels as $key=>$value){
+                      foreach($subjects as $key2=>$value2){
+                        $view['teacher_id'] = $data_inserted;
+                        $view['levels_id'] = $value;
+                        $view['subject_id'] = $value2;
+                       
+                        //'<pre>'; print_r($view);die;
+                       $map_insert = $this->Tutors_model->add_subjectwiselevel($view);
+                      }
+                    }
+                    
+                    //$class['teacher_id'] = $data_inserted;
+                      // $class['subject_id'] = $value2;
+                      if($map_insert==TRUE){
+                           foreach($subjects as $key=>$value){
+                            $class['teacher_id'] = $data_inserted;
+                            $class['subject_id'] = $value;
+                            $this->Tutors_model->add_data_subjectteacher($class); 
+                          }
+                            $this->session->set_flashdata('success_msg', 'Varify login link sent to your registred email.');
+                       }
+
+                 }
+                
+                
+
+                 
+                 
+                 
+                 
+                // send to users
+                $this->load->library('email');
+                $to = $data['email'];
+
+                $subject = " Login Link";
+                $message = 'Hi <br><br>'
+                          .'Your signup request has been received. Login Please click <br>'
+                          .'the below link to .<br><br>'
+                          .'<a href=" '.base_url('tutors/loginconfirm')."/".$code.'">Account Confirmation Now</a>'
+                          .'Thanks For Signup <br>';
+
+               
+                // Always set content-type when sending HTML email
+
+                $headers = "MIME-Version: 1.0" . "\r\n";
+
+                $headers .= "Content-type:text/html;charset=UTF-8" . "\r\n";
+
+               
+                //$headers .= 'From: <info@a2ztutorials.co.uk>' . 
+
+                $headers .= 'From: <jayanti.mahetechnologies@gmail.com>' . "\r\n";
+
+
+            
+        mail($to,$subject,$message,$headers);
+        $this->session->set_flashdata('success_msg', 'Varify login link sent to your registred email. ');  
+        redirect('tutors/signup');  
+
+            }
+
+        }
+
+
+
+          
+    }
+       
+        $data['subjects_data'] = $this->Tutors_model->get_subjects();
+        $data['levels_data'] = $this->Tutors_model->get_levels();
+
+
+        $this->template->set('title','Tutor Signup');
+        $this->template->set_layout('layout_main','front');
+        $this->template->build('tutorsignup',$data);
+    }
+
+public function google(){
+       require_once APPPATH.'third_party/src/Google_Client.php';
+       require_once APPPATH.'third_party/src/contrib/Google_Oauth2Service.php';
+        // old
+        $clientId = '733899773141-4qtn33j5c0pkobv26fnvqvbkdbke4ugg.apps.googleusercontent.com'; 
+        $clientSecret = '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'; 
+        $redirectURL = 'https://a2ztutorials.co.uk/googleprofile';
+        
+        
+      
+
+        //Call Google API
+        $gClient = new Google_Client();
+        //var_dump($gClient); die;
+        $gClient->setApplicationName('a2ztutorials');
+        $gClient->setClientId($clientId);
+        $gClient->setClientSecret($clientSecret);
+        $gClient->setRedirectUri($redirectURL);
+        $google_oauthV2 = new Google_Oauth2Service($gClient);
+        
+        if(isset($_GET['code']))
+        {
+            $gClient->authenticate($_GET['code']);
+            $_SESSION['token'] = $gClient->getAccessToken();
+            header('Location: ' . filter_var($redirectURL, FILTER_SANITIZE_URL));
+        }
+
+        if (isset($_SESSION['token'])) 
+        {
+            $gClient->setAccessToken($_SESSION['token']);
+        }
+        
+        if ($gClient->getAccessToken()) {
+            $userProfile = $google_oauthV2->userinfo->get();
+            echo "<pre>";
+            print_r($userProfile);
+            die;
+        } 
+        else 
+        {
+            $url = $gClient->createAuthUrl();
+            header("Location: $url");
+            exit;
+        }
+    } 
+public function loginconfirm() { 
+    $code =  $this->uri->segment(3);
+
+    
+        if($this->uri->segment(3)=="")
+        {
+            $this->session->set_flashdata('err_msg', 'Dont Change the URL physically'); 
+            redirect('tutors');
+        }
+        else
+        {
+           $data['mail_status'] = '1';
+           $update = $this->Tutors_model->update_maildata($data,$code);
+           
+           $this->session->set_flashdata('success_msg', 'Account Confirmation Successfully'); 
+           redirect('tutors/login');
+
+        }
+    }
+
+   
+    public function login(){
+          if ($this->input->server('REQUEST_METHOD') == 'POST'){
+            $email= $this->input->post('email');
+            $password= md5($this->input->post('password'));
+            
+
+            $this->form_validation->set_rules('email', ' Email', 'trim|required');
+            $this->form_validation->set_rules('password', 'Password', 'trim|required');
+
+             if ($this->form_validation->run() == true) {  
+                 $query = $this->Tutors_model->validate($email,$password);
+                
+                        if($query){
+                        $this->session->set_flashdata('success_msg', 'You are Loggedin !!');
+                        redirect('tutors'); 
+                    }else{
+                        $this->session->set_flashdata('err_msg', 'Email or Password is not match, Please try again.');
+                        redirect('tutors/login');
+                    }
+                } else {
+             
+                    $this->session->set_flashdata('err_msg', 'Please fill all field and try again.');
+                    redirect('tutors/login');
+                }
+        }
+
+        
+        $this->template->set_layout('layout_main', 'front');
+        $this->template->build('tutorslogin',$data);
+    }
+
+
+    // ajax_university
+    public function ajax_university(){
+
+        $university_id = $this->input->post('university_id');
+       
+         $university_data = $this->Tutors_model->searching_uni_domainmail($university_id);
+         
+
+         foreach ($university_data as $university) {
+
+             echo 
+              '<option value= "'.$university->email_domain.'"> '.$university->email_domain.'</option>'.'<br>';
+          
+         }
+
+
+         exit();
+    }
+     public function ajax_university2(){
+
+        $university_id2 = $this->input->post('university_id2');
+       
+         $university_data2 = $this->Tutors_model->searching_uni_domainmail($university_id2);
+         
+
+         foreach ($university_data2 as $university2) {
+
+             echo 
+              '<option value= "'.$university2->email_domain.'"> '.$university2->email_domain.'</option>'.'<br>';
+          
+         }
+
+
+         exit();
+    }
+    
+    public function edit($slug_name){
+           //echo $id;die;
+        if ($this->input->server('REQUEST_METHOD') == 'POST'){
+            // print_r($_POST);die;
+            $data['name']= strip_tags($this->input->post('name'));
+            $slug =  $data['name'];
+            $data['slug_name'] = strtolower(preg_replace('/[^A-Za-z0-9-]+/', '-',$slug));
+
+            
+            $data['email']= strip_tags($this->input->post('email'));
+           
+            $data['phone']= strip_tags($this->input->post('phone'));
+            $data['title']= strip_tags($this->input->post('title'));
+           
+            $data['gender']= strip_tags($this->input->post('gender'));
+            $data['address1']= strip_tags($this->input->post('address1'));
+            $data['address2']= strip_tags($this->input->post('address2'));
+            $data['town']= strip_tags($this->input->post('town'));
+            $data['county']= strip_tags($this->input->post('county'));
+            $data['country']= strip_tags($this->input->post('country'));
+            $data['postalcode']= strip_tags($this->input->post('postalcode'));
+            $data['travel']= strip_tags($this->input->post('travel'));
+            $data['degree']= strip_tags($this->input->post('degree'));
+            
+            $data['language']= strip_tags($this->input->post('language'));
+            $data['yourbio']= strip_tags($this->input->post('yourbio'));
+            $data['experience']= strip_tags($this->input->post('experience'));
+            $data['preferred_location']= strip_tags($this->input->post('preferred_location'));
+            $data['price']= strip_tags($this->input->post('price'));
+            $data['in_person']= strip_tags($this->input->post('in_person'));
+            $data['online_lesson']= strip_tags($this->input->post('online_lesson'));
+            $data['subject_offered']= json_encode($this->input->post('subject_offered'));
+            $data['session']= strip_tags($this->input->post('session'));
+            $data['about']= strip_tags($this->input->post('about'));
+            $data['dateofbirth']= strip_tags($this->input->post('dateofbirth'));
+            $data['total_session']= strip_tags($this->input->post('total_session'));
+
+            
+            date_default_timezone_set('Europe/London');
+            $data['added_on']=date('Y-m-d H:i:s');
+            
+
+            $this->form_validation->set_rules('name', 'name', 'trim|required');
+           
+            
+
+            if($this->form_validation->run() == TRUE){
+
+
+                $this->load->library('upload');
+              
+                
+                    //  image
+                    // Faking upload calls to $_FILE
+                        $_FILES['userfile']['name']     = $_FILES['image_src']['name'];
+                        $_FILES['userfile']['type']     = $_FILES['image_src']['type'];
+                        $_FILES['userfile']['tmp_name'] = $_FILES['image_src']['tmp_name'];
+                        $_FILES['userfile']['error']    = $_FILES['image_src']['error'];
+                        $_FILES['userfile']['size']     = $_FILES['image_src']['size'];
+                        $config['upload_path']          = './admin/uploads/teacher_image';
+
+                        $config['allowed_types']        = 'png|jpg|jpeg';
+                        $config['max_size']             = 100000;
+                        
+                        $this->upload->initialize($config);
+
+
+                        if (! $this->upload->do_upload()) {
+                         $error = array('error' => $this->upload->display_errors()); 
+                        
+                        } else {
+                            
+                            $final_files_data[] = $this->upload->data();
+                            
+                             $data['image_src']= $final_files_data[0]['file_name'];
+                             
+                         }
+
+                $data_inserted = $this->Tutors_model->edit_profile($data,$slug_name);
+                
+                $this->session->set_flashdata('success_msg', 'Teacher Profile Edited Successfully'); 
+                redirect('tutors');
+            }
+            else{
+                 $this->session->set_flashdata('err_msg', 'Something Wrong! Please try again');
+                 redirect('tutors/edit');
+                }  
+            
+        }
+
+        
+
+        $this->template->set('title', 'Edit Teacher Profile');
+        $data_class['single_data'] = $this->Tutors_model->get_data_by_id($slug_name);
+        $data_class['subject_offered'] = $this->Tutors_model->get_subject_offered();
+        $data_class['university_data'] = $this->Tutors_model->get_university();
+        // echo '<pre>';
+        // print_r($data_class['single_data']); die;
+        $this->template->set_layout('layout_main', 'front');
+        $this->template->build('editteacherprofile',$data_class);
+
+        }
+        
+    public function changepassword(){
+       
+    $teacher_id = $this->session->userdata('teacher_id');
+    if($this->input->server('REQUEST_METHOD') == 'POST'){
+
+    $data['old_pass']= strip_tags($this->input->post('old_pass'));
+    $data['new_pass']= strip_tags($this->input->post('new_pass'));
+    $data['con_pass']= strip_tags($this->input->post('con_pass'));
+          
+    $this->form_validation->set_rules('old_pass','Old password','trim|required');
+    $this->form_validation->set_rules('new_pass','New password', 'trim|required');
+    $this->form_validation->set_rules('con_pass', 'Confirm password', 'trim|required');
+
+   
+
+    $single_data = $this->Tutors_model->get_teacherdata_by_id($teacher_id);
+
+  if($this->form_validation->run() == TRUE) {
+            
+               if($single_data[0]->password == md5($data['old_pass'])){
+
+                if($data['new_pass'] == $data['con_pass']){
+                      $new_pass = md5($data['new_pass']);
+                      $result= $this->Tutors_model->update_password($teacher_id,$new_pass);
+
+                       if($result){
+                         $this->session->set_flashdata('success_msg', 'password Edited Successfully'); 
+                         redirect('tutors');
+                        }else{
+                          $this->session->set_flashdata('err_msg', 'Password not change');
+                        }
+
+                  }else{
+                    $this->session->set_flashdata('err_msg', 'Please Confirm and New Password Correctly');
+                  }
+
+               }else{
+                  $this->session->set_flashdata('err_msg', 'Please Enter Previous Password Correctly.');
+               }
+
+                    
+        
+        }   
+    }
+      $this->template->set('title', 'Edit Password');
+      $this->template->set_layout('layout_main', 'front');
+      $this->template->build('changepassword',$data);   
+    }
+      
+     public function teacher_logout(){
+        $this->session->sess_destroy();
+        $this->session->unset_userdata('teacher_id');
+        redirect('home');
+    }   
+
+
+
+    } 
+
+?>
